@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BNB Safe Vault</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 20px;
+      background: #f4f6f9;
+      color: #222;
+    }
+    main {
+      background: white;
+      padding: 22px;
+      border-radius: 12px;
+    }
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin: 7px 0;
+    }
+    button {
+      cursor: pointer;
+      background: #f0b90b;
+      border: 0;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .result {
+      overflow-wrap: anywhere;
+      padding: 12px;
+      background: #f4f6f9;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>BNB Safe Vault</h1>
+  <p>Lock ERC-20 tokens and calculate estimated rewards.</p>
+
+  <button id="connect">Connect Wallet</button>
+  <p id="wallet">Wallet not connected</p>
+
+  <label>SafeVault contract address</label>
+  <input id="vaultAddress" placeholder="Enter deployed contract address">
+
+  <label>Token amount</label>
+  <input id="amount" type="number" min="0" step="any" placeholder="Example: 100">
+
+  <label>Lock duration (days)</label>
+  <input id="duration" type="number" min="1" placeholder="Example: 30">
+
+  <button id="lock">Approve & Lock Tokens</button>
+  <button id="view">View My Compartment & Reward</button>
+  <button id="unlock">Unlock After Expiry</button>
+
+  <h3>My Compartment</h3>
+  <div id="result" class="result">Connect your wallet to begin.</div>
+  <p id="status" role="status"></p>
+</main>
+
+<script>
+const vaultABI = [
+  "function token() view returns (address)",
+  "function lockTokens(uint256 amount, uint256 duration)",
+  "function getMyCompartment() view returns (tuple(uint256 amount,uint256 startTime,uint256 unlockTime,bool active))",
+  "function calculateReward(address user) view returns (uint256)",
+  "function unlockTokens()"
+];
+
+const tokenABI = [
+  "function decimals() view returns (uint8)",
+  "function approve(address spender, uint256 amount) returns (bool)"
+];
+
+let provider;
+let signer;
+let userAddress;
+
+const status = (message) => {
+  document.getElementById("status").textContent = message;
+};
+
+function getVault() {
+  const address = document.getElementById("vaultAddress").value.trim();
+
+  if (!ethers.isAddress(address)) {
+    throw new Error("Enter a valid deployed SafeVault address.");
+  }
+
+  return new ethers.Contract(address, vaultABI, signer);
+}
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    throw new Error("Open this page in a browser with MetaMask.");
+  }
+
+  provider = new ethers.BrowserProvider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  signer = await provider.getSigner();
+  userAddress = await signer.getAddress();
+
+  const network = await provider.getNetwork();
+
+  if (network.chainId !== 97n) {
+    throw new Error("Switch MetaMask to BNB Smart Chain Testnet (chain ID 97).");
+  }
+
+  document.getElementById("wallet").textContent =
+    "Connected: " + userAddress;
+
+  status("Wallet connected to BNB Smart Chain Testnet.");
+}
+
+document.getElementById("connect").onclick = async () => {
+  try {
+    await connectWallet();
+  } catch (error) {
+    status(error.message);
+  }
+};
+
+document.getElementById("lock").onclick = async () => {
+  try {
+    if (!signer) throw new Error("Connect your wallet first.");
+
+    const vault = getVault();
+    const tokenAddress = await vault.token();
+    const token = new ethers.Contract(tokenAddress, tokenABI, signer);
+
+    const amountText = document.getElementById("amount").value;
+    const days = Number(document.getElementById("duration").value);
+
+    if (!amountText || !Number.isFinite(Number(amountText)) ||
+        Number(amountText) <= 0) {
+      throw new Error("Enter a valid token amount.");
+    }
+
+    if (!Number.isSafeInteger(days) || days < 1) {
+      throw new Error("Enter a duration of at least one whole day.");
+    }
+
+    const decimals = await token.decimals();
+    const amount = ethers.parseUnits(amountText, decimals);
+    const duration = BigInt(days) * 86400n;
+
+    status("Please approve the token transfer in your wallet...");
+    const approval = await token.approve(await vault.getAddress(), amount);
+    await approval.wait();
+
+    status("Please confirm the lock transaction...");
+    const transaction = await vault.lockTokens(amount, duration);
+    await transaction.wait();
+
+    status("Tokens locked successfully.");
+  } catch (error) {
+    status(error.shortMessage || error.message);
+  }
+};
+
+document.getElementById("view").onclick = async () => {
+  try {
+    if (!signer) throw new Error("Connect your wallet first.");
+
+    const vault = getVault();
+    const tokenAddress = await vault.token();
+    const token = new ethers.Contract(tokenAddress, tokenABI, signer);
+    const decimals = await token.decimals();
+
+    const compartment = await vault.getMyCompartment();
+    const reward = await vault.calculateReward(userAddress);
+
+    document.getElementById("result").textContent =
+      "Locked tokens: " + ethers.formatUnits(compartment[0], decimals) +
+      " | Unlock time: " +
+      (Number(compartment[2]) === 0
+        ? "Not set"
+        : new Date(Number(compartment[2]) * 1000).toLocaleString()) +
+      " | Active: " + compartment[3] +
+      " | Calculated reward: " +
+      ethers.formatUnits(reward, decimals);
+
+    status("Compartment updated.");
+  } catch (error) {
+    status(error.shortMessage || error.message);
+  }
+};
+
+document.getElementById("unlock").onclick = async () => {
+  try {
+    if (!signer) throw new Error("Connect your wallet first.");
+
+    status("Please confirm the unlock transaction...");
+    const transaction = await getVault().unlockTokens();
+    await transaction.wait();
+
+    status("Tokens unlocked successfully.");
+  } catch (error) {
+    status(error.shortMessage || error.message);
+  }
+};
+</script>
+</body>
+</html>
