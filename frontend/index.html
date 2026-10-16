@@ -71,7 +71,7 @@ const vaultABI = [
   "function token() view returns (address)",
   "function lockTokens(uint256 amount, uint256 duration)",
   "function getMyCompartment() view returns (tuple(uint256 amount,uint256 startTime,uint256 unlockTime,bool active))",
-  "function calculateReward(address user) view returns (uint256)",
+  "function calculateReward() view returns (uint256)",
   "function unlockTokens()"
 ];
 
@@ -176,7 +176,7 @@ document.getElementById("view").onclick = async () => {
     const decimals = await token.decimals();
 
     const compartment = await vault.getMyCompartment();
-    const reward = await vault.calculateReward(userAddress);
+    const reward = await vault.calculateReward();
 
     document.getElementById("result").textContent =
       "Locked tokens: " + ethers.formatUnits(compartment[0], decimals) +
