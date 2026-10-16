@@ -26,8 +26,7 @@ describe("SafeVault", function () {
   }
 
   it("allows a user to lock tokens", async function () {
-    const { alice, token, vault, amount } =
-      await deployFixture();
+    const { alice, token, vault, amount } = await deployFixture();
 
     await vault.connect(alice).lockTokens(amount, 3600);
 
@@ -54,8 +53,7 @@ describe("SafeVault", function () {
   });
 
   it("keeps each user's compartment separate", async function () {
-    const { alice, bob, vault, amount } =
-      await deployFixture();
+    const { alice, bob, vault, amount } = await deployFixture();
 
     await vault.connect(alice).lockTokens(amount, 3600);
 
@@ -72,38 +70,82 @@ describe("SafeVault", function () {
     expect(bobCompartment.amount).to.equal(0);
     expect(bobCompartment.active).to.equal(false);
   });
-  
-it("calculates rewards without distributing them", async function () {
-  const { alice, vault, amount } = await deployFixture();
 
-  await vault.connect(alice).lockTokens(
-    amount,
-    30 * 24 * 60 * 60
-  );
+  it("calculates rewards without distributing them", async function () {
+    const { alice, vault, amount } = await deployFixture();
 
-  await ethers.provider.send("evm_increaseTime", [86400]);
-  await ethers.provider.send("evm_mine", []);
+    await vault
+      .connect(alice)
+      .lockTokens(amount, 30 * 24 * 60 * 60);
 
-  const reward = await vault.calculateReward(alice.address);
+    await ethers.provider.send("evm_increaseTime", [86400]);
+    await ethers.provider.send("evm_mine", []);
 
-  expect(reward).to.be.greaterThan(0);
-
-  const aliceBalanceBefore = await ethers.provider.getBalance(
-    alice.address
-  );
-
-  expect(await vault.calculateReward(alice.address)).to.equal(reward);
-
-  expect(await ethers.provider.getBalance(alice.address))
-    .to.equal(aliceBalanceBefore);
-});
-
-    await vault.connect(alice).lockTokens(amount, 30 * 24 * 60 * 60);
-
-    const reward = await vault.calculateReward(alice.address);
+    const reward = await vault
+      .connect(alice)
+      .calculateReward();
 
     expect(reward).to.be.greaterThan(0);
-    expect(await vault.calculateReward(alice.address))
-      .to.equal(reward);
+
+    const compartment = await vault
+      .connect(alice)
+      .getMyCompartment();
+
+    expect(compartment.amount).to.equal(amount);
+    expect(compartment.active).to.equal(true);
+
+    expect(
+      await vault.connect(alice).calculateReward()
+    ).to.equal(reward);
+  });
+
+  it("allows a user to unlock tokens after expiry", async function () {
+    const { alice, token, vault, amount } = await deployFixture();
+
+    await vault
+      .connect(alice)
+      .lockTokens(amount, 3600);
+
+    await ethers.provider.send("evm_increaseTime", [3601]);
+    await ethers.provider.send("evm_mine", []);
+
+    await vault.connect(alice).unlockTokens();
+
+    const compartment = await vault
+      .connect(alice)
+      .getMyCompartment();
+
+    expect(compartment.amount).to.equal(0);
+    expect(compartment.active).to.equal(false);
+
+    expect(
+      await token.balanceOf(alice.address)
+    ).to.equal(amount);
+  });
+
+  it("rejects zero token amounts", async function () {
+    const { alice, vault } = await deployFixture();
+
+    await expect(
+      vault.connect(alice).lockTokens(0, 3600)
+    ).to.be.revertedWith("Amount must be positive");
+  });
+
+  it("rejects zero lock duration", async function () {
+    const { alice, vault, amount } = await deployFixture();
+
+    await expect(
+      vault.connect(alice).lockTokens(amount, 0)
+    ).to.be.revertedWith("Duration must be positive");
+  });
+
+  it("prevents a second active compartment for the same user", async function () {
+    const { alice, vault, amount } = await deployFixture();
+
+    await vault.connect(alice).lockTokens(amount, 3600);
+
+    await expect(
+      vault.connect(alice).lockTokens(amount, 3600)
+    ).to.be.revertedWith("Compartment active");
   });
 });
