@@ -72,9 +72,31 @@ describe("SafeVault", function () {
     expect(bobCompartment.amount).to.equal(0);
     expect(bobCompartment.active).to.equal(false);
   });
+  
+it("calculates rewards without distributing them", async function () {
+  const { alice, vault, amount } = await deployFixture();
 
-  it("calculates rewards without distributing them", async function () {
-    const { alice, vault, amount } = await deployFixture();
+  await vault.connect(alice).lockTokens(
+    amount,
+    30 * 24 * 60 * 60
+  );
+
+  await ethers.provider.send("evm_increaseTime", [86400]);
+  await ethers.provider.send("evm_mine", []);
+
+  const reward = await vault.calculateReward(alice.address);
+
+  expect(reward).to.be.greaterThan(0);
+
+  const aliceBalanceBefore = await ethers.provider.getBalance(
+    alice.address
+  );
+
+  expect(await vault.calculateReward(alice.address)).to.equal(reward);
+
+  expect(await ethers.provider.getBalance(alice.address))
+    .to.equal(aliceBalanceBefore);
+});
 
     await vault.connect(alice).lockTokens(amount, 30 * 24 * 60 * 60);
 
