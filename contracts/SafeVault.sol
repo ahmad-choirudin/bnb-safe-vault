@@ -1,4 +1,3 @@
-
  // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -16,7 +15,7 @@ contract SafeVault is ReentrancyGuard {
         bool active;
     }
 
-    mapping(address => Compartment) public compartments;
+    mapping(address => Compartment) private compartments;
 
     event TokensLocked(
         address indexed user,
@@ -42,10 +41,12 @@ contract SafeVault is ReentrancyGuard {
         require(duration > 0, "Duration must be positive");
         require(!compartments[msg.sender].active, "Compartment active");
 
+        uint256 unlockTime = block.timestamp + duration;
+
         compartments[msg.sender] = Compartment({
             amount: amount,
             startTime: block.timestamp,
-            unlockTime: block.timestamp + duration,
+            unlockTime: unlockTime,
             active: true
         });
 
@@ -54,17 +55,11 @@ contract SafeVault is ReentrancyGuard {
             "Transfer failed"
         );
 
-        emit TokensLocked(
-            msg.sender,
-            amount,
-            block.timestamp + duration
-        );
+        emit TokensLocked(msg.sender, amount, unlockTime);
     }
 
-    function calculateReward(
-        address user
-    ) public view returns (uint256) {
-        Compartment memory c = compartments[user];
+    function calculateReward() external view returns (uint256) {
+        Compartment memory c = compartments[msg.sender];
 
         if (!c.active || block.timestamp <= c.startTime) {
             return 0;
@@ -85,6 +80,7 @@ contract SafeVault is ReentrancyGuard {
         require(block.timestamp >= c.unlockTime, "Still locked");
 
         uint256 amount = c.amount;
+
         c.active = false;
         c.amount = 0;
 
