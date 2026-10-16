@@ -1,0 +1,15 @@
+{
+  "name": "bnb-safe-vault",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A token-locking vault smart contract for BNB Chain",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.17",
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
