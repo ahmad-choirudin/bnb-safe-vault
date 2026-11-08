@@ -1,10 +1,16 @@
- // SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+/// @notice Locks ERC-20 tokens per user and reports an estimated (non-paid) reward.
 contract SafeVault is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    uint256 public constant MAX_DURATION = 365 days;
+
     IERC20 public immutable token;
     uint256 public immutable rewardRateBps;
 
@@ -17,12 +23,7 @@ contract SafeVault is ReentrancyGuard {
 
     mapping(address => Compartment) private compartments;
 
-    event TokensLocked(
-        address indexed user,
-        uint256 amount,
-        uint256 unlockTime
-    );
-
+    event TokensLocked(address indexed user, uint256 amount, uint256 unlockTime);
     event TokensUnlocked(address indexed user, uint256 amount);
 
     constructor(address tokenAddress, uint256 rateBps) {
@@ -33,33 +34,31 @@ contract SafeVault is ReentrancyGuard {
         rewardRateBps = rateBps;
     }
 
-    function lockTokens(
-        uint256 amount,
-        uint256 duration
-    ) external nonReentrant {
+    function lockTokens(uint256 amount, uint256 duration) external nonReentrant {
         require(amount > 0, "Amount must be positive");
         require(duration > 0, "Duration must be positive");
+        require(duration <= MAX_DURATION, "Duration too long");
         require(!compartments[msg.sender].active, "Compartment active");
 
-        uint256 unlockTime = block.timestamp + duration;
+        // Record what the vault actually received (supports fee-on-transfer tokens).
+        uint256 balanceBefore = token.balanceOf(address(this));
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = token.balanceOf(address(this)) - balanceBefore;
+        require(received > 0, "Nothing received");
 
+        uint256 unlockTime = block.timestamp + duration;
         compartments[msg.sender] = Compartment({
-            amount: amount,
+            amount: received,
             startTime: block.timestamp,
             unlockTime: unlockTime,
             active: true
         });
 
-        require(
-            token.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
-
-        emit TokensLocked(msg.sender, amount, unlockTime);
+        emit TokensLocked(msg.sender, received, unlockTime);
     }
 
-    function calculateReward() external view returns (uint256) {
-        Compartment memory c = compartments[msg.sender];
+    function calculateReward(address user) external view returns (uint256) {
+        Compartment memory c = compartments[user];
 
         if (!c.active || block.timestamp <= c.startTime) {
             return 0;
@@ -69,8 +68,7 @@ contract SafeVault is ReentrancyGuard {
             ? block.timestamp - c.startTime
             : c.unlockTime - c.startTime;
 
-        return (c.amount * rewardRateBps * elapsed)
-            / (10000 * 365 days);
+        return (c.amount * rewardRateBps * elapsed) / (10000 * 365 days);
     }
 
     function unlockTokens() external nonReentrant {
@@ -80,20 +78,15 @@ contract SafeVault is ReentrancyGuard {
         require(block.timestamp >= c.unlockTime, "Still locked");
 
         uint256 amount = c.amount;
-
         c.active = false;
         c.amount = 0;
 
-        require(token.transfer(msg.sender, amount), "Transfer failed");
+        token.safeTransfer(msg.sender, amount);
 
         emit TokensUnlocked(msg.sender, amount);
     }
 
-    function getMyCompartment()
-        external
-        view
-        returns (Compartment memory)
-    {
-        return compartments[msg.sender];
+    function getCompartment(address user) external view returns (Compartment memory) {
+        return compartments[user];
     }
 }
