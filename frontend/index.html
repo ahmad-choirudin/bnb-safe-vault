@@ -1,212 +1,262 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BNB Safe Vault</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: 30px auto;
-      padding: 20px;
-      background: #f4f6f9;
-      color: #222;
-    }
-    main {
-      background: white;
-      padding: 22px;
-      border-radius: 12px;
-    }
-    input, button {
-      box-sizing: border-box;
-      width: 100%;
-      padding: 12px;
-      margin: 7px 0;
-    }
-    button {
-      cursor: pointer;
-      background: #f0b90b;
-      border: 0;
-      border-radius: 6px;
-      font-weight: bold;
-    }
-    .result {
-      overflow-wrap: anywhere;
-      padding: 12px;
-      background: #f4f6f9;
-      border-radius: 6px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BNB Safe Vault</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+:root{--bg:#0b0e14;--card:#141923;--line:#242c3b;--text:#eaecef;--mute:#8b93a3;--gold:#f0b90b;--ok:#2ebd85;--err:#f6465d}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);
+background:radial-gradient(900px 500px at 50% -10%,#2a2208 0,transparent 70%),var(--bg);padding:20px 14px 40px}
+.wrap{max-width:560px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:18px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}
+.logo i{width:34px;height:34px;border-radius:10px;background:var(--gold);color:#000;display:grid;place-items:center;font-style:normal}
+.pill{font-size:12px;padding:6px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.pill.on{color:var(--ok);border-color:#1d5a44}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+h2{margin:0 0 12px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+label{display:block;font-size:13px;color:var(--mute);margin:12px 0 6px}
+input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0e121a;color:var(--text);font-size:15px}
+input:focus{outline:2px solid var(--gold);border-color:transparent}
+button{width:100%;padding:13px;border:0;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;background:var(--gold);color:#000;margin-top:12px;transition:opacity .15s,transform .1s}
+button:active{transform:scale(.98)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.chips{display:flex;gap:8px;margin-top:8px}
+.chip{flex:1;margin:0;padding:8px;background:#0e121a;color:var(--text);border:1px solid var(--line);font-size:13px}
+.chip.sel{border-color:var(--gold);color:var(--gold)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#0e121a;border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat small{color:var(--mute);font-size:12px}
+.stat b{display:block;margin-top:4px;font-size:17px;overflow-wrap:anywhere}
+.est{margin-top:10px;font-size:13px;color:var(--mute)}.est b{color:var(--gold)}
+#status{border-radius:12px;padding:12px 14px;font-size:14px;margin-top:4px;display:none;overflow-wrap:anywhere}
+#status.show{display:block}
+#status.info{background:#1a2230;color:#b8c4dc}#status.ok{background:#12291f;color:var(--ok)}#status.err{background:#2c141a;color:var(--err)}
+footer{text-align:center;color:var(--mute);font-size:12px;margin-top:18px}
+@media(max-width:420px){.grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-<main>
-  <h1>BNB Safe Vault</h1>
-  <p>Lock ERC-20 tokens and calculate estimated rewards.</p>
+<div class="wrap">
+  <header>
+    <div class="logo"><i>🔒</i> BNB Safe Vault</div>
+    <span class="pill" id="net">Not connected</span>
+  </header>
 
-  <button id="connect">Connect Wallet</button>
-  <p id="wallet">Wallet not connected</p>
+  <div id="status" role="status"></div>
 
-  <label>SafeVault contract address</label>
-  <input id="vaultAddress" placeholder="Enter deployed contract address">
+  <div class="card">
+    <button id="connect" style="margin-top:0">Connect Wallet</button>
+    <button id="switch" class="ghost" hidden>Switch to BNB Testnet</button>
+    <p id="wallet" class="est" style="margin-bottom:0"></p>
+    <label for="vaultAddress">SafeVault contract address</label>
+    <input id="vaultAddress" placeholder="0x..." autocomplete="off" spellcheck="false">
+  </div>
 
-  <label>Token amount</label>
-  <input id="amount" type="number" min="0" step="any" placeholder="Example: 100">
+  <div class="card">
+    <h2>My Vault</h2>
+    <div class="grid">
+      <div class="stat"><small>Locked</small><b id="sLocked">-</b></div>
+      <div class="stat"><small>Estimated reward</small><b id="sReward">-</b></div>
+      <div class="stat"><small>Unlocks in</small><b id="sTime">-</b></div>
+      <div class="stat"><small>Wallet balance</small><b id="sBal">-</b></div>
+    </div>
+    <div class="row">
+      <button id="refresh" class="ghost">Refresh</button>
+      <button id="unlock" disabled>Unlock</button>
+    </div>
+  </div>
 
-  <label>Lock duration (days)</label>
-  <input id="duration" type="number" min="1" placeholder="Example: 30">
+  <div class="card">
+    <h2>Lock Tokens</h2>
+    <label for="amount">Token amount</label>
+    <input id="amount" type="number" min="0" step="any" placeholder="e.g. 100" inputmode="decimal">
+    <label for="days">Lock duration (days, max 365)</label>
+    <input id="days" type="number" min="1" max="365" step="1" placeholder="e.g. 30" inputmode="numeric">
+    <div class="chips" id="chips">
+      <button class="chip" data-d="7">7d</button><button class="chip" data-d="30">30d</button>
+      <button class="chip" data-d="90">90d</button><button class="chip" data-d="365">365d</button>
+    </div>
+    <p class="est" id="est">Estimated reward: <b>-</b></p>
+    <button id="lock">Approve &amp; Lock</button>
+  </div>
 
-  <button id="lock">Approve & Lock Tokens</button>
-  <button id="view">View My Compartment & Reward</button>
-  <button id="unlock">Unlock After Expiry</button>
-
-  <h3>My Compartment</h3>
-  <div id="result" class="result">Connect your wallet to begin.</div>
-  <p id="status" role="status"></p>
-</main>
+  <footer>Educational project. Use test tokens on BNB Smart Chain Testnet only.</footer>
+</div>
 
 <script>
+const CHAIN_ID = 97n;
 const vaultABI = [
   "function token() view returns (address)",
+  "function rewardRateBps() view returns (uint256)",
   "function lockTokens(uint256 amount, uint256 duration)",
-  "function getMyCompartment() view returns (tuple(uint256 amount,uint256 startTime,uint256 unlockTime,bool active))",
-  "function calculateReward() view returns (uint256)",
+  "function getCompartment(address user) view returns (tuple(uint256 amount,uint256 startTime,uint256 unlockTime,bool active))",
+  "function calculateReward(address user) view returns (uint256)",
   "function unlockTokens()"
 ];
-
 const tokenABI = [
   "function decimals() view returns (uint8)",
-  "function approve(address spender, uint256 amount) returns (bool)"
+  "function symbol() view returns (string)",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address,address) view returns (uint256)",
+  "function approve(address,uint256) returns (bool)"
 ];
 
-let provider;
-let signer;
-let userAddress;
+const $ = (id) => document.getElementById(id);
+let provider, signer, user, ctx = null, unlockAt = 0, rateBps = 0n, timer;
 
-const status = (message) => {
-  document.getElementById("status").textContent = message;
-};
+function setStatus(msg, type = "info") {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "show " + type;
+}
+const short = (a) => a.slice(0, 6) + "..." + a.slice(-4);
+const fmt = (v, d) => Number(ethers.formatUnits(v, d)).toLocaleString(undefined, { maximumFractionDigits: 6 });
+const errText = (e) => e.shortMessage || e.reason || e.message || String(e);
 
-function getVault() {
-  const address = document.getElementById("vaultAddress").value.trim();
-
-  if (!ethers.isAddress(address)) {
-    throw new Error("Enter a valid deployed SafeVault address.");
-  }
-
-  return new ethers.Contract(address, vaultABI, signer);
+async function run(btn, fn) {
+  const was = btn.disabled;
+  btn.disabled = true;
+  try { await fn(); } catch (e) { setStatus(errText(e), "err"); }
+  btn.disabled = was;
+  tick();
 }
 
-async function connectWallet() {
-  if (!window.ethereum) {
-    throw new Error("Open this page in a browser with MetaMask.");
-  }
-
-  provider = new ethers.BrowserProvider(window.ethereum);
-  await provider.send("eth_requestAccounts", []);
-  signer = await provider.getSigner();
-  userAddress = await signer.getAddress();
-
-  const network = await provider.getNetwork();
-
-  if (network.chainId !== 97n) {
+async function connect() {
+  if (!window.ethereum) throw new Error("Open this page in a browser with MetaMask.");
+  const p = new ethers.BrowserProvider(window.ethereum);
+  await p.send("eth_requestAccounts", []);
+  const net = await p.getNetwork();
+  if (net.chainId !== CHAIN_ID) {
+    signer = null;
+    $("switch").hidden = false;
+    $("net").textContent = "Wrong network";
+    $("net").className = "pill";
     throw new Error("Switch MetaMask to BNB Smart Chain Testnet (chain ID 97).");
   }
-
-  document.getElementById("wallet").textContent =
-    "Connected: " + userAddress;
-
-  status("Wallet connected to BNB Smart Chain Testnet.");
+  provider = p;
+  signer = await p.getSigner();
+  user = await signer.getAddress();
+  $("switch").hidden = true;
+  $("net").textContent = "BSC Testnet";
+  $("net").className = "pill on";
+  $("wallet").textContent = "Connected: " + short(user);
+  setStatus("Wallet connected.", "ok");
+  await load(true);
 }
 
-document.getElementById("connect").onclick = async () => {
+async function switchNetwork() {
   try {
-    await connectWallet();
-  } catch (error) {
-    status(error.message);
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x61" }] });
+  } catch (e) {
+    if (e.code !== 4902) throw e;
+    await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
+      chainId: "0x61", chainName: "BNB Smart Chain Testnet",
+      nativeCurrency: { name: "tBNB", symbol: "tBNB", decimals: 18 },
+      rpcUrls: ["https://data-seed-prebsc-1-s1.binance.org:8545"],
+      blockExplorerUrls: ["https://testnet.bscscan.com"]
+    }] });
   }
-};
+  await connect();
+}
 
-document.getElementById("lock").onclick = async () => {
-  try {
-    if (!signer) throw new Error("Connect your wallet first.");
+async function load(quiet) {
+  if (!signer) throw new Error("Connect your wallet first.");
+  const addr = $("vaultAddress").value.trim();
+  if (!ethers.isAddress(addr)) throw new Error("Enter a valid SafeVault address.");
+  try { localStorage.setItem("vaultAddress", addr); } catch (_) {}
 
-    const vault = getVault();
-    const tokenAddress = await vault.token();
-    const token = new ethers.Contract(tokenAddress, tokenABI, signer);
+  const vault = new ethers.Contract(addr, vaultABI, signer);
+  const token = new ethers.Contract(await vault.token(), tokenABI, signer);
+  const [decimals, symbol, rate] = await Promise.all([token.decimals(), token.symbol(), vault.rewardRateBps()]);
+  ctx = { vault, token, decimals, symbol };
+  rateBps = rate;
 
-    const amountText = document.getElementById("amount").value;
-    const days = Number(document.getElementById("duration").value);
+  const [c, reward, bal] = await Promise.all([
+    vault.getCompartment(user), vault.calculateReward(user), token.balanceOf(user)
+  ]);
+  $("sLocked").textContent = c.active ? fmt(c.amount, decimals) + " " + symbol : "None";
+  $("sReward").textContent = fmt(reward, decimals) + " " + symbol;
+  $("sBal").textContent = fmt(bal, decimals) + " " + symbol;
+  unlockAt = c.active ? Number(c.unlockTime) : 0;
+  tick();
+  updateEstimate();
+  if (!quiet) setStatus("Vault updated.", "ok");
+}
 
-    if (!amountText || !Number.isFinite(Number(amountText)) ||
-        Number(amountText) <= 0) {
-      throw new Error("Enter a valid token amount.");
+function tick() {
+  const left = unlockAt - Math.floor(Date.now() / 1000);
+  let text = "-";
+  if (unlockAt) {
+    if (left <= 0) text = "Ready";
+    else {
+      const d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60);
+      text = d > 0 ? d + "d " + h + "h" : h > 0 ? h + "h " + m + "m" : m + "m " + (left % 60) + "s";
     }
-
-    if (!Number.isSafeInteger(days) || days < 1) {
-      throw new Error("Enter a duration of at least one whole day.");
-    }
-
-    const decimals = await token.decimals();
-    const amount = ethers.parseUnits(amountText, decimals);
-    const duration = BigInt(days) * 86400n;
-
-    status("Please approve the token transfer in your wallet...");
-    const approval = await token.approve(await vault.getAddress(), amount);
-    await approval.wait();
-
-    status("Please confirm the lock transaction...");
-    const transaction = await vault.lockTokens(amount, duration);
-    await transaction.wait();
-
-    status("Tokens locked successfully.");
-  } catch (error) {
-    status(error.shortMessage || error.message);
   }
-};
+  $("sTime").textContent = text;
+  $("unlock").disabled = !(unlockAt && left <= 0);
+}
 
-document.getElementById("view").onclick = async () => {
-  try {
-    if (!signer) throw new Error("Connect your wallet first.");
+function updateEstimate() {
+  const a = Number($("amount").value), d = Number($("days").value);
+  const out = $("est").querySelector("b");
+  if (!ctx || !(a > 0) || !(d >= 1)) { out.textContent = "-"; return; }
+  const est = a * Number(rateBps) / 10000 * d / 365;
+  out.textContent = est.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " " + ctx.symbol +
+    " (" + (Number(rateBps) / 100) + "% per year)";
+}
 
-    const vault = getVault();
-    const tokenAddress = await vault.token();
-    const token = new ethers.Contract(tokenAddress, tokenABI, signer);
-    const decimals = await token.decimals();
+async function lock() {
+  if (!ctx) await load(true);
+  const amountText = $("amount").value;
+  const days = Number($("days").value);
+  if (!(Number(amountText) > 0)) throw new Error("Enter a valid token amount.");
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("Duration must be 1 to 365 whole days.");
 
-    const compartment = await vault.getMyCompartment();
-    const reward = await vault.calculateReward();
-
-    document.getElementById("result").textContent =
-      "Locked tokens: " + ethers.formatUnits(compartment[0], decimals) +
-      " | Unlock time: " +
-      (Number(compartment[2]) === 0
-        ? "Not set"
-        : new Date(Number(compartment[2]) * 1000).toLocaleString()) +
-      " | Active: " + compartment[3] +
-      " | Calculated reward: " +
-      ethers.formatUnits(reward, decimals);
-
-    status("Compartment updated.");
-  } catch (error) {
-    status(error.shortMessage || error.message);
+  const amount = ethers.parseUnits(amountText, ctx.decimals);
+  const vaultAddr = await ctx.vault.getAddress();
+  if ((await ctx.token.allowance(user, vaultAddr)) < amount) {
+    setStatus("Approve the token transfer in your wallet...");
+    await (await ctx.token.approve(vaultAddr, amount)).wait();
   }
+  setStatus("Confirm the lock transaction...");
+  await (await ctx.vault.lockTokens(amount, BigInt(days) * 86400n)).wait();
+  await load(true);
+  setStatus("Tokens locked successfully.", "ok");
+}
+
+async function unlock() {
+  if (!ctx) await load(true);
+  setStatus("Confirm the unlock transaction...");
+  await (await ctx.vault.unlockTokens()).wait();
+  await load(true);
+  setStatus("Tokens unlocked successfully.", "ok");
+}
+
+$("connect").onclick = (e) => run(e.target, connect);
+$("switch").onclick = (e) => run(e.target, switchNetwork);
+$("refresh").onclick = (e) => run(e.target, () => load(false));
+$("lock").onclick = (e) => run(e.target, lock);
+$("unlock").onclick = (e) => run(e.target, unlock);
+$("amount").oninput = updateEstimate;
+$("days").oninput = () => {
+  document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("sel", c.dataset.d === $("days").value));
+  updateEstimate();
 };
+document.querySelectorAll(".chip").forEach((c) => c.onclick = () => { $("days").value = c.dataset.d; $("days").oninput(); });
 
-document.getElementById("unlock").onclick = async () => {
-  try {
-    if (!signer) throw new Error("Connect your wallet first.");
-
-    status("Please confirm the unlock transaction...");
-    const transaction = await getVault().unlockTokens();
-    await transaction.wait();
-
-    status("Tokens unlocked successfully.");
-  } catch (error) {
-    status(error.shortMessage || error.message);
-  }
-};
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", () => location.reload());
+  window.ethereum.on("chainChanged", () => location.reload());
+}
+try { $("vaultAddress").value = localStorage.getItem("vaultAddress") || ""; } catch (_) {}
+timer = setInterval(tick, 1000);
 </script>
 </body>
 </html>
